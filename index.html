@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OmniPath Clip Prep</title>
+<meta name="description" content="Trim, crop, mute and convert an iPhone video into an OmniPath Workout exercise demo clip. Everything runs on your device." />
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #020617;
+    --card: #0f172a;
+    --card-2: #020617;
+    --line: #1e293b;
+    --line-2: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --faint: #64748b;
+    --accent: #fbbf24;
+    --accent-ink: #0f172a;
+    --good: #34d399;
+    --good-bg: rgba(16, 185, 129, 0.12);
+    --warn: #fbbf24;
+    --warn-bg: rgba(251, 191, 36, 0.1);
+    --bad: #fb7185;
+    --bad-bg: rgba(244, 63, 94, 0.1);
+    --info: #67e8f9;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px 16px 64px;
+  }
+  main { max-width: 640px; margin: 0 auto; display: grid; gap: 16px; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 0.04em; color: var(--accent); }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; }
+  .card[hidden] { display: none; }
+  h2 { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; display: flex; gap: 8px; align-items: center; }
+  h2 .num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 11px; }
+  .small { font-size: 12px; color: var(--muted); }
+  .faint { color: var(--faint); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .spread { justify-content: space-between; }
+  button, .btn {
+    font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    background: var(--line); color: var(--text); border: 1px solid var(--line-2);
+    border-radius: 8px; padding: 8px 12px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  button:hover, .btn:hover { border-color: var(--faint); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .primary:hover { filter: brightness(1.05); border-color: var(--accent); }
+  .good-btn { background: var(--good); color: #022c22; border-color: var(--good); }
+  .wide { width: 100%; padding: 12px; font-size: 15px; }
+  .notice { border-radius: 8px; padding: 10px 12px; font-size: 13px; border: 1px solid; }
+  .notice.bad { background: var(--bad-bg); border-color: rgba(244, 63, 94, 0.35); color: #fecdd3; }
+  .notice.warn { background: var(--warn-bg); border-color: rgba(251, 191, 36, 0.35); color: #fde68a; }
+  .notice.good { background: var(--good-bg); border-color: rgba(16, 185, 129, 0.35); color: #a7f3d0; }
+  .notice[hidden] { display: none; }
+
+  /* Step 1: file picker */
+  .drop {
+    border: 2px dashed var(--line-2); border-radius: var(--radius); padding: 28px 16px; text-align: center;
+    cursor: pointer; display: grid; gap: 6px; justify-items: center;
+  }
+  .drop.over { border-color: var(--accent); background: var(--warn-bg); }
+  .drop strong { font-size: 16px; }
+  .drop input { display: none; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .fact { background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+
+  /* Step 2: preview with crop box */
+  .stage-wrap { display: grid; justify-items: center; }
+  .stage {
+    position: relative; overflow: hidden; border-radius: 8px; background: #000;
+    width: min(100%, calc(55vh * var(--ar, 1)));
+    aspect-ratio: var(--ar, 1);
+    user-select: none; -webkit-user-select: none;
+  }
+  .stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+  .crop {
+    position: absolute; border: 2px solid var(--accent); border-radius: 2px;
+    box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.62);
+    pointer-events: none;
+  }
+  .crop::before, .crop::after { content: ""; position: absolute; border-color: rgba(251, 191, 36, 0.35); border-style: solid; }
+  .crop::before { left: 33.33%; right: 33.33%; top: 0; bottom: 0; border-width: 0 1px; }
+  .crop::after { top: 33.33%; bottom: 33.33%; left: 0; right: 0; border-width: 1px 0; }
+  .drag-hint { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); font-size: 11px; font-weight: 700; background: rgba(2, 6, 23, 0.8); padding: 3px 8px; border-radius: 999px; color: var(--accent); pointer-events: none; white-space: nowrap; }
+  .stage.can-drag { cursor: grab; }
+  .stage.dragging { cursor: grabbing; }
+  .clock { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: var(--muted); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .trim-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; }
+  .trim-grid label { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .num-in {
+    width: 76px; background: var(--card-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 6px;
+    padding: 5px 6px; font: inherit; font-size: 13px; text-align: right;
+  }
+
+  /* Chips (frame shape / size) */
+  .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+  .chip { display: block; cursor: pointer; }
+  .chip input { position: absolute; opacity: 0; pointer-events: none; }
+  .chip span {
+    display: grid; gap: 2px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--card-2);
+    font-size: 13px; font-weight: 700; height: 100%;
+  }
+  .chip small { font-weight: 500; color: var(--faint); font-size: 11px; }
+  .chip input:checked + span { border-color: var(--accent); background: var(--warn-bg); color: var(--accent); }
+  .chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Step 4: exercise search */
+  .search { position: relative; }
+  .search input {
+    width: 100%; background: var(--card-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 8px;
+    padding: 10px 12px; font: inherit;
+  }
+  .results { list-style: none; margin: 6px 0 0; padding: 0; max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .results:empty { display: none; }
+  .results li button {
+    width: 100%; border: 0; border-radius: 0; border-bottom: 1px solid var(--line); background: transparent;
+    justify-content: space-between; text-align: left; font-weight: 600; padding: 9px 12px;
+  }
+  .results li:last-child button { border-bottom: 0; }
+  .results li button:hover, .results li button.active { background: var(--line); }
+  .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .badge { font-size: 10px; font-weight: 800; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+  .badge.has { color: var(--info); border-color: rgba(103, 232, 249, 0.35); background: rgba(6, 182, 212, 0.1); }
+  .filename { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; font-weight: 800; color: var(--accent); word-break: break-all; }
+
+  /* Progress + result */
+  .bar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
+  .bar div { height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
+  .result-video { width: 100%; max-width: 360px; margin: 0 auto; display: block; border-radius: 8px; border: 1px solid var(--line); background: #000; }
+  ol.steps { margin: 0; padding-left: 20px; font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  ol.steps b { color: var(--text); }
+  details summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--muted); }
+  details ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; color: var(--text); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>OmniPath Clip Prep</h1>
+    <p>Turn an iPhone video into a ready-to-upload exercise demo: trimmed, cropped, silent, small <code>.mp4</code>. Everything happens on this device. Your video is never uploaded anywhere.</p>
+  </header>
+
+  <div id="supportNotice" class="notice bad" hidden></div>
+
+  <!-- 1. Pick a video -->
+  <section class="card">
+    <h2><span class="num">1</span> Choose a video</h2>
+    <label id="drop" class="drop">
+      <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v" />
+      <strong>Tap to choose a video</strong>
+      <span class="small">or drag one here · .mov, .mp4 and other phone/camera formats</span>
+    </label>
+    <div id="fileFacts" class="facts" hidden></div>
+    <div id="fileNotice" class="notice" hidden></div>
+  </section>
+
+  <!-- 2. Trim + frame -->
+  <section id="editCard" class="card" hidden>
+    <h2><span class="num">2</span> Trim and frame</h2>
+    <div class="stage-wrap">
+      <div id="stage" class="stage">
+        <video id="preview" playsinline muted preload="auto"></video>
+        <div id="cropBox" class="crop"></div>
+        <div id="dragHint" class="drag-hint" hidden>Drag to position</div>
+      </div>
+    </div>
+    <div id="previewNotice" class="notice warn" hidden>
+      This browser can't show a preview of this video, but it may still convert it. Use the numbers below to trim.
+    </div>
+
+    <div class="row spread">
+      <div class="row">
+        <button id="playBtn" type="button">▶ Play clip</button>
+        <span id="clock" class="clock">0.0s</span>
+      </div>
+      <span id="clipLen" class="small"></span>
+    </div>
+
+    <div class="trim-grid">
+      <label for="startRange">Start</label>
+      <input id="startRange" type="range" min="0" step="0.05" value="0" />
+      <input id="startNum" class="num-in" type="number" min="0" step="0.1" inputmode="decimal" aria-label="Start time in seconds" />
+      <label for="endRange">End</label>
+      <input id="endRange" type="range" min="0" step="0.05" value="0" />
+      <input id="endNum" class="num-in" type="number" min="0" step="0.1" inputmode="decimal" aria-label="End time in seconds" />
+    </div>
+    <div class="row">
+      <button id="setStartBtn" type="button">Set start here</button>
+      <button id="setEndBtn" type="button">Set end here</button>
+      <span class="small faint">Pause the preview at the moment you want, then tap.</span>
+    </div>
+    <div id="lengthNotice" class="notice warn" hidden></div>
+
+    <div class="small" style="font-weight:700">Shape</div>
+    <div class="chips" id="shapeChips">
+      <label class="chip"><input type="radio" name="shape" value="square" checked /><span>Square<small>1:1 · best on phones</small></span></label>
+      <label class="chip"><input type="radio" name="shape" value="portrait" /><span>Portrait<small>4:5 · a bit taller</small></span></label>
+      <label class="chip"><input type="radio" name="shape" value="landscape" /><span>Landscape<small>16:9 · wide</small></span></label>
+      <label class="chip"><input type="radio" name="shape" value="original" /><span>As filmed<small>no crop</small></span></label>
+    </div>
+    <div id="positionRow" class="trim-grid" style="grid-template-columns:auto 1fr">
+      <label id="positionLabel" for="positionRange">Position</label>
+      <input id="positionRange" type="range" min="0" max="1" step="0.005" value="0.5" />
+    </div>
+  </section>
+
+  <!-- 3. Size -->
+  <section id="sizeCard" class="card" hidden>
+    <h2><span class="num">3</span> Size</h2>
+    <div class="chips" id="sizeChips">
+      <label class="chip"><input type="radio" name="size" value="480" /><span>Small<small id="size480"></small></span></label>
+      <label class="chip"><input type="radio" name="size" value="720" checked /><span>Standard<small id="size720"></small></span></label>
+      <label class="chip"><input type="radio" name="size" value="1080" /><span>Sharp<small id="size1080"></small></span></label>
+    </div>
+    <p class="small" style="margin:0">Standard (720) looks crisp on phones and keeps files around 1–2 MB. Audio is always removed, and frame rate is capped at 30 fps.</p>
+  </section>
+
+  <!-- 4. Exercise -->
+  <section id="exerciseCard" class="card" hidden>
+    <h2><span class="num">4</span> Which exercise is this?</h2>
+    <div class="search">
+      <input id="exerciseSearch" type="search" placeholder="Search, e.g. “bench” or “ex_001”" autocomplete="off" aria-controls="results" aria-label="Search exercises" />
+      <ul id="results" class="results" role="listbox"></ul>
+    </div>
+    <div id="listStatus" class="small faint"></div>
+    <div id="chosen" hidden>
+      <div class="small">File name</div>
+      <div id="fileName" class="filename"></div>
+      <div id="chosenName" class="small"></div>
+    </div>
+    <div id="replaceNotice" class="notice warn" hidden></div>
+  </section>
+
+  <!-- 5. Convert -->
+  <section id="convertCard" class="card" hidden>
+    <h2><span class="num">5</span> Convert</h2>
+    <div id="summary" class="small"></div>
+    <button id="convertBtn" class="primary wide" type="button" disabled>Make the clip</button>
+    <div id="progressWrap" hidden>
+      <div class="bar"><div id="progressBar"></div></div>
+      <div class="row spread" style="margin-top:6px">
+        <span id="progressText" class="small">Starting…</span>
+        <button id="cancelBtn" type="button">Cancel</button>
+      </div>
+    </div>
+    <div id="convertNotice" class="notice" hidden></div>
+  </section>
+
+  <!-- 6. Result -->
+  <section id="resultCard" class="card" hidden>
+    <h2><span class="num">✓</span> Ready to upload</h2>
+    <video id="resultVideo" class="result-video" autoplay muted loop playsinline></video>
+    <div id="resultFacts" class="facts" style="justify-content:center"></div>
+    <div class="row" style="justify-content:center">
+      <a id="downloadBtn" class="btn good-btn" download>⬇ Download</a>
+      <button id="shareBtn" type="button" hidden>Share / Save to Files</button>
+      <button id="againBtn" type="button">Make another</button>
+    </div>
+    <ol class="steps">
+      <li>Open <a id="uploadLink" target="_blank" rel="noopener">your repo's <code>public/videos</code> upload page</a> (or go to the folder on GitHub → <b>Add file → Upload files</b>).</li>
+      <li>Drag in <b id="uploadName">the file</b> and press <b>Commit changes</b>. Use <b>Upload files</b>, not "Create new file", which would make an empty file.</li>
+      <li>Wait a minute or two for the site to redeploy. The clip then shows up on the website and in the phone apps.</li>
+    </ol>
+  </section>
+
+  <details class="card">
+    <summary>Tips and troubleshooting</summary>
+    <ul>
+      <li>Aim for <b>3–10 seconds</b>: one or two clean reps. The app loops the clip.</li>
+      <li>Film with the phone held still, and keep the whole movement inside the square.</li>
+      <li>Works best in <b>Safari</b> (iPhone/Mac) or a recent <b>Chrome / Edge</b>. Firefox usually can't read iPhone (HEVC) videos.</li>
+      <li>If a browser can't read your video, set iPhone <b>Settings → Camera → Formats → Most Compatible</b> and film again.</li>
+      <li>If colors look washed out, the video was filmed in HDR. Turn off <b>Settings → Camera → Record Video → HDR Video</b> for demo clips.</li>
+      <li>Upload the <code>.mp4</code> this page makes, not the original <code>.mov</code>. The app only picks up <code>.mp4</code> and <code>.webm</code> files.</li>
+    </ul>
+  </details>
+</main>
+
+<script type="module">
+import {
+  ALL_FORMATS, BlobSource, BufferTarget, Conversion, Input, Mp4OutputFormat, Output,
+  QUALITY_MEDIUM, canEncodeVideo
+} from "https://cdn.jsdelivr.net/npm/mediabunny@1.61.3/dist/bundles/mediabunny.min.mjs";
+
+// ---------------------------------------------------------------------------
+// Settings: point these at your app if the repo or site ever moves.
+// ---------------------------------------------------------------------------
+const CONFIG = {
+  // The live site. Used to mark exercises that already have a video (reads videos/index.json).
+  siteUrl: "https://connormramey-create.github.io/OmniPathWorkout/",
+  // The exercise list in the app repo, so new exercises show up here automatically.
+  exercisesUrl: "https://raw.githubusercontent.com/connormramey-create/OmniPathWorkout/main/src/data/exercises.json",
+  // GitHub's upload page for the videos folder.
+  uploadUrl: "https://github.com/connormramey-create/OmniPathWorkout/upload/main/public/videos",
+  maxFps: 30,
+  longClipSeconds: 15,
+};
+
+// Snapshot of the exercise list, used if the live list can't be loaded (offline, or the repo is private).
+const EXERCISE_SNAPSHOT = [
+  ["ex_001","Barbell Bench Press"],["ex_002","Incline Barbell Bench Press"],["ex_003","Decline Barbell Bench Press"],["ex_004","Flat Dumbbell Fly"],["ex_005","Incline Dumbbell Fly"],["ex_006","Flat Dumbbell Bench Press"],
+  ["ex_007","Incline Dumbbell Press"],["ex_008","Decline Dumbbell Bench Press"],["ex_009","Cable Crossover"],["ex_010","Low Cable Fly"],["ex_011","High Cable Fly"],["ex_012","Pec Deck Machine Fly"],
+  ["ex_013","Chest Press Machine"],["ex_014","Incline Chest Press Machine"],["ex_015","Push-Up"],["ex_016","Incline Push-Up"],["ex_017","Decline Push-Up"],["ex_018","Diamond Push-Up"],
+  ["ex_019","Archer Push-Up"],["ex_020","Chest Dip"],["ex_021","Weighted Chest Dip"],["ex_022","Dumbbell Pullover"],["ex_023","Landmine Press"],["ex_024","Single-Arm Cable Fly"],
+  ["ex_025","Smith Machine Bench Press"],["ex_026","Smith Machine Incline Press"],["ex_027","Barbell Back Squat"],["ex_028","Barbell Front Squat"],["ex_029","Goblet Squat"],["ex_030","Dumbbell Goblet Squat"],
+  ["ex_031","Leg Press"],["ex_032","Hack Squat Machine"],["ex_033","Leg Extension"],["ex_034","Single-Leg Extension"],["ex_035","Bulgarian Split Squat"],["ex_036","Barbell Walking Lunge"],
+  ["ex_037","Dumbbell Walking Lunge"],["ex_038","Reverse Lunge"],["ex_039","Step-Up"],["ex_040","Sissy Squat"],["ex_041","Pistol Squat"],["ex_042","Box Jump"],
+  ["ex_043","Zercher Squat"],["ex_044","Smith Machine Squat"],["ex_045","Landmine Hack Squat"],["ex_046","Side Lunge"],["ex_047","Barbell Conventional Deadlift"],["ex_048","Barbell Sumo Deadlift"],
+  ["ex_049","Barbell Romanian Deadlift"],["ex_050","Dumbbell Romanian Deadlift"],["ex_051","Single-Leg Romanian Deadlift"],["ex_052","Barbell Stiff-Legged Deadlift"],["ex_053","Lying Leg Curl"],["ex_054","Seated Leg Curl"],
+  ["ex_055","Standing Single-Leg Curl"],["ex_056","Nordic Hamstring Curl"],["ex_057","Stability Ball Leg Curl"],["ex_058","Good Morning"],["ex_059","Kettlebell Swing"],["ex_060","Barbell Hip Thrust"],
+  ["ex_061","Single-Leg Hip Thrust"],["ex_062","Barbell Glute Bridge"],["ex_063","Cable Pull-Through"],["ex_064","Cable Glute Kickback"],["ex_065","Abductor Machine"],["ex_066","Adductor Machine"],
+  ["ex_067","45-Degree Back Extension"],["ex_068","Overhand Pull-Up"],["ex_069","Underhand Chin-Up"],["ex_070","Neutral Grip Pull-Up"],["ex_071","Lat Pulldown (Wide Grip)"],["ex_072","Lat Pulldown (Close Neutral Grip)"],
+  ["ex_073","Reverse Grip Lat Pulldown"],["ex_074","Single-Arm Cable Lat Pulldown"],["ex_075","Straight-Arm Cable Pushdown"],["ex_076","Bent-Over Barbell Row"],["ex_077","Pendlay Row"],["ex_078","T-Bar Row"],
+  ["ex_079","Single-Arm Dumbbell Row"],["ex_080","Chest-Supported Dumbbell Row"],["ex_081","Seated Cable Row"],["ex_082","Single-Arm Seated Cable Row"],["ex_083","Inverted Row"],["ex_084","Face Pull"],
+  ["ex_085","Barbell Shrug"],["ex_086","Dumbbell Shrug"],["ex_087","Rack Pull"],["ex_088","Overhead Barbell Press"],["ex_089","Seated Barbell Overhead Press"],["ex_090","Seated Dumbbell Shoulder Press"],
+  ["ex_091","Standing Dumbbell Arnold Press"],["ex_092","Dumbbell Lateral Raise"],["ex_093","Cable Lateral Raise"],["ex_094","Machine Lateral Raise"],["ex_095","Dumbbell Front Raise"],["ex_096","Cable Front Raise"],
+  ["ex_097","Bent-Over Dumbbell Rear Delt Fly"],["ex_098","Reverse Cable Fly"],["ex_099","Reverse Pec Deck Fly"],["ex_100","Push Press"],["ex_101","Upright Row"],["ex_102","Cable Upright Row"],
+  ["ex_103","Handstand Push-Up"],["ex_104","Pike Push-Up"],["ex_105","Barbell Biceps Curl"],["ex_106","EZ Bar Biceps Curl"],["ex_107","Alternating Dumbbell Curl"],["ex_108","Incline Dumbbell Curl"],
+  ["ex_109","Dumbbell Hammer Curl"],["ex_110","Cable Hammer Curl (Rope)"],["ex_111","Preacher Curl (EZ Bar)"],["ex_112","Concentration Curl"],["ex_113","Standing Cable Curl"],["ex_114","High Cable Biceps Curl"],
+  ["ex_115","Reverse Grip Barbell Curl"],["ex_116","Barbell Wrist Curl"],["ex_117","Barbell Reverse Wrist Curl"],["ex_118","Spider Curl"],["ex_119","Triceps Cable Pushdown (Straight Bar)"],["ex_120","Triceps Cable Pushdown (Rope)"],
+  ["ex_121","Overhead Cable Triceps Extension"],["ex_122","Skull Crushers (EZ Bar)"],["ex_123","Single-Arm Dumbbell Overhead Extension"],["ex_124","Dumbbell Triceps Kickback"],["ex_125","Close-Grip Barbell Bench Press"],["ex_126","Triceps Bench Dip"],
+  ["ex_127","Single-Arm Cable Kickback"],["ex_128","JM Press"],["ex_129","Standing Calf Raise"],["ex_130","Seated Calf Raise"],["ex_131","Donkey Calf Raise"],["ex_132","Leg Press Calf Raise"],
+  ["ex_133","Single-Leg Bodyweight Calf Raise"],["ex_134","Dumbbell Single-Leg Calf Raise"],["ex_135","Tibialis Raise"],["ex_136","Hanging Leg Raise"],["ex_137","Hanging Knee Raise"],["ex_138","Captain's Chair Leg Raise"],
+  ["ex_139","Ab Wheel Rollout"],["ex_140","Cable Crunch"],["ex_141","Decline Sit-Up"],["ex_142","Weighted Decline Sit-Up"],["ex_143","Air Bike / Bicycle Crunch"],["ex_144","Russian Twist"],
+  ["ex_145","Weighted Russian Twist"],["ex_146","Cable Woodchopper (High-to-Low)"],["ex_147","Cable Woodchopper (Low-to-High)"],["ex_148","Plank"],["ex_149","Side Plank"],["ex_150","Dragon Flag"],
+  ["ex_151","Toes to Bar"],["ex_152","Dead Bug"],["ex_153","Bird Dog"],["ex_154","Farmer's Walk"],["ex_155","Suitcase Carry"],["ex_156","Lying Leg Raise"],
+  ["ex_157","Reverse Crunch"],["ex_158","Mountain Climber"],["ex_159","Paloff Press"],["ex_160","Hollow Body Hold"],["ex_161","Band Pull-Apart"],["ex_162","Banded Face Pull"],
+  ["ex_163","Resistance Band Squat"],["ex_164","Resistance Band Biceps Curl"],["ex_165","Resistance Band Triceps Extension"],["ex_166","Kettlebell Goblet Squat"],["ex_167","Kettlebell Turkish Get-Up"],["ex_168","Kettlebell Sumo Deadlift High Pull"],
+  ["ex_169","Kettlebell Clean and Press"],["ex_170","Kettlebell Windmill"],["ex_171","Trap Bar Deadlift"],["ex_172","Trap Bar Shrug"],["ex_173","Landmine Single-Arm Row"],["ex_174","Landmine Rotation / Twist"],
+  ["ex_175","Glute Ham Raise (GHR)"],["ex_176","Reverse Hyperextension"],["ex_177","Belt Squat"],["ex_178","Preacher Curl Machine"],["ex_179","Triceps Dip Machine"],["ex_180","Abdominal Crunch Machine"],
+  ["ex_181","Rotary Torso Machine"],["ex_182","Assisted Pull-Up Machine"],["ex_183","Assisted Dip Machine"],["ex_184","Kettlebell Snatch"],["ex_185","Dumbbell Floor Press"],["ex_186","Barbell Floor Press"],
+  ["ex_187","Dumbbell Incline Row"],["ex_188","Cable Overhead Curl"],["ex_189","Plate Front Raise"],["ex_190","Landmine Meadows Row"],["ex_191","Kettlebell Bottoms-Up Press"],["ex_192","Seated Calf Raise (Dumbbell on Knees)"],
+  ["ex_193","Barbell Overhead Carry"],["ex_194","Zercher Carry"],["ex_195","Standing Cable Fly"],["ex_196","Seal Row"],["ex_197","Ring Dip"],["ex_198","Muscle-Up"],
+  ["ex_199","GHD Sit-Up"],["ex_200","Copenhagen Side Plank"],["ex_201","Guillotine Bench Press"],["ex_202","Reverse-Grip Bench Press"],["ex_203","Cable Incline Press"],["ex_204","Single-Arm Dumbbell Bench Press"],
+  ["ex_205","Svend Press"],["ex_206","Pause Bench Press"],["ex_207","Spoto Press"],["ex_208","Close-Neutral Grip Dumbbell Press"],["ex_209","Plyometric Push-Up"],["ex_210","Feet-Elevated Push-Up"],
+  ["ex_211","Hand-Release Push-Up"],["ex_212","Band-Resisted Push-Up"],["ex_213","Decline Cable Fly"],["ex_214","Pin Bench Press"],["ex_215","Single-Arm Incline Dumbbell Press"],["ex_216","Low-to-High Dumbbell Fly"],
+  ["ex_217","Machine Incline Chest Fly"],["ex_218","Kettlebell Press"],["ex_219","Deficit Push-Up"],["ex_220","Single-Arm Push-Up"],["ex_221","Safety Bar Squat"],["ex_222","Pause Squat"],
+  ["ex_223","Box Squat"],["ex_224","Pin Squat"],["ex_225","Forward Lunge"],["ex_226","Curtsy Lunge"],["ex_227","Pendulum Squat"],["ex_228","V-Squat Machine"],
+  ["ex_229","Single-Leg Leg Press"],["ex_230","Goblet Forward Lunge"],["ex_231","Overhead Barbell Squat"],["ex_232","Anderson Squat"],["ex_233","Kettlebell Front Rack Squat"],["ex_234","Wall Sit"],
+  ["ex_235","Jump Squat"],["ex_236","Skater Hop"],["ex_237","Deficit Reverse Lunge"],["ex_238","Landmine Goblet Squat"],["ex_239","Step-Down (Eccentric Focus)"],["ex_240","Spanish Squat"],
+  ["ex_241","Deficit Deadlift"],["ex_242","Pause Deadlift"],["ex_243","Reeves Deadlift"],["ex_244","Single-Leg Leg Curl"],["ex_245","Band Hamstring Curl"],["ex_246","Dumbbell Lying Leg Curl"],
+  ["ex_247","Kettlebell Romanian Deadlift"],["ex_248","Single-Leg Glute Bridge"],["ex_249","Frog Pump"],["ex_250","Standing Cable Hip Extension"],["ex_251","Clamshell"],["ex_252","Banded Clamshell"],
+  ["ex_253","Banded Lateral Monster Walk"],["ex_254","Fire Hydrant"],["ex_255","Cable Hip Abduction"],["ex_256","Hyperextension with Weight"],["ex_257","Good Morning with Safety Bar"],["ex_258","Single-Leg Kettlebell Deadlift"],
+  ["ex_259","Banded Good Morning"],["ex_260","Smith Machine Hip Thrust"],["ex_261","Weighted Pull-Up"],["ex_262","Weighted Chin-Up"],["ex_263","Commando Pull-Up"],["ex_264","Kneeling Cable Lat Pulldown"],
+  ["ex_265","Lat Pulldown behind the Neck"],["ex_266","Wide-Grip Seated Cable Row"],["ex_267","Chest-Supported Barbell Row"],["ex_268","Single-Arm Dumbbell Row on Bench"],["ex_269","Kettlebell Gorilla Row"],["ex_270","Kettlebell Single-Arm Row"],
+  ["ex_271","Helms Row"],["ex_272","Y-Raise (Incline Bench)"],["ex_273","T-Raise (Incline Bench)"],["ex_274","Scapular Pull-Up"],["ex_275","Behind-the-Back Barbell Shrug"],["ex_276","Overhead Dumbbell Shrug"],
+  ["ex_277","Cable Shrug"],["ex_278","Jefferson Curl"],["ex_279","Superman"],["ex_280","Prone Y-T-W Raise"],["ex_281","Viking Press"],["ex_282","Single-Arm Landmine Shoulder Press"],
+  ["ex_283","Z Press"],["ex_284","Dumbbell Z Press"],["ex_285","Incline Dumbbell Lateral Raise"],["ex_286","Behind-the-Back Cable Lateral Raise"],["ex_287","Lu Raise"],["ex_288","Plate Steering Wheel"],
+  ["ex_289","Cable Face Pull with External Rotation"],["ex_290","Seated Bent-Over Rear Delt Fly"],["ex_291","Lying Cable Lateral Raise"],["ex_292","Smith Machine Overhead Press"],["ex_293","Single-Arm Dumbbell Arnold Press"],["ex_294","Halos (Kettlebell)"],
+  ["ex_295","Scapular Push-Up"],["ex_296","Band External Rotation"],["ex_297","Band Internal Rotation"],["ex_298","Cable External Rotation"],["ex_299","Cuban Press"],["ex_300","Dumbbell Overhead Carry"],
+  ["ex_301","Zottman Curl"],["ex_302","Drag Curl"],["ex_303","Cable Preacher Curl"],["ex_304","Single-Arm Cable Curl"],["ex_305","Bayesian Curl"],["ex_306","Plate Curl"],
+  ["ex_307","Cross-Body Hammer Curl"],["ex_308","Waiters Curl"],["ex_309","Kettlebell Biceps Curl"],["ex_310","Farmer's Handle Wrist Roller"],["ex_311","Behind-the-Back Barbell Wrist Curl"],["ex_312","Plate Pinch Hold"],
+  ["ex_313","Dead Hang"],["ex_314","Towel Pull-Up"],["ex_315","Single-Arm Overhead Cable Triceps Extension"],["ex_316","Incline Dumbbell Triceps Extension"],["ex_317","Cross-Body Cable Extension"],["ex_318","Tate Press"],
+  ["ex_319","Board Press"],["ex_320","California Press"],["ex_321","Bodyweight Triceps Extension (Bar)"],["ex_322","Reverse-Grip Cable Pushdown"],["ex_323","EZ Bar Overhead Triceps Extension"],["ex_324","Dumbbell Skull Crusher"],
+  ["ex_325","Diamond Push-Up on Incline"],["ex_326","Cable Overhead Triceps Extension (Rope)"],["ex_327","Barbell Overhead Triceps Extension"],["ex_328","Decline Skull Crusher"],["ex_329","Single-Arm Cable Pushdown"],["ex_330","Machine Triceps Extension"],
+  ["ex_331","Smith Machine Standing Calf Raise"],["ex_332","Barbell Standing Calf Raise"],["ex_333","Dumbbell Standing Calf Raise"],["ex_334","Seated Calf Raise with Barbell on Knees"],["ex_335","Single-Leg Leg Press Calf Raise"],["ex_336","Farmer's Walk on Toes"],
+  ["ex_337","Jump Rope"],["ex_338","Box Calf Jumps"],["ex_339","Band Ankle Dorsiflexion"],["ex_340","Kettlebell Tibialis Raise"],["ex_341","Hanging Oblique Knee Raise"],["ex_342","L-Sit"],
+  ["ex_343","V-Up"],["ex_344","Weighted Planks"],["ex_345","RKC Plank"],["ex_346","Plank to Push-Up"],["ex_347","Spiderman Plank"],["ex_348","Cable Side Bend"],
+  ["ex_349","Dumbbell Side Bend"],["ex_350","45-Degree Side Bend"],["ex_351","Ab Wheel Rollout from Feet"],["ex_352","Barbell Rollout"],["ex_353","Stability Ball Ab Rollout"],["ex_354","Jackknife on Stability Ball"],
+  ["ex_355","Pike on Stability Ball"],["ex_356","Flutter Kicks"],["ex_357","Scissor Kicks"],["ex_358","Toe Touches (Lying)"],["ex_359","Windshield Wipers (Lying)"],["ex_360","Hanging Windshield Wipers"],
+  ["ex_361","Bear Crawl Hold"],["ex_362","Bear Crawl Movement"],["ex_363","Stir the Pot (Stability Ball)"],["ex_364","Overhead Kettlebell Carry"],["ex_365","Waiter Carry"],["ex_366","Barbell Zercher Squat Hold"],
+  ["ex_367","Half-Kneeling Pallof Press"],["ex_368","Tall-Kneeling Cable Overhead Triceps Extension"],["ex_369","Landmine Rainbow"],["ex_370","Single-Arm Overhead Kettlebell Squat"],["ex_371","Single-Leg Balance Drive"],["ex_372","TRX Suspension Row"],
+  ["ex_373","TRX Push-Up"],["ex_374","TRX Atomic Push-Up"],["ex_375","TRX Hamstring Runner"],["ex_376","TRX Y-Fly"],["ex_377","Band-Resisted Barbell Deadlift"],["ex_378","Chain-Resisted Bench Press"],
+  ["ex_379","Sled Push"],["ex_380","Sled Pull (Backward)"],["ex_381","Medicine Ball Chest Pass"],["ex_382","Medicine Ball Overhead Slam"],["ex_383","Medicine Ball Rotational Wall Throw"],["ex_384","Battle Rope Alternating Waves"],
+  ["ex_385","Battle Rope Double Arm Slams"],["ex_386","Barbell Muscle Snatch"],["ex_387","Barbell Power Clean"],["ex_388","Barbell Hang Clean"],["ex_389","Barbell Push Jerk"],["ex_390","Single-Leg Box Squat"],
+  ["ex_391","Band-Resisted Hip Thrust"],["ex_392","Frog Reverse Hyperextension"],["ex_393","Dumbbell High Pull"],["ex_394","Kettlebell Halo to Reverse Lunge"],["ex_395","Incline Dumbbell Shrug"],["ex_396","Cable Internal Rotation (Elevated Arm)"],
+  ["ex_397","Cable External Rotation (Elevated Arm)"],["ex_398","Prone Cobra"],["ex_399","Jefferson Squat"],["ex_400","Zercher Deadlift"],["ex_401","Elevated Pike Push-Up"],["ex_402","Archer Pull-Up"],
+  ["ex_403","Air Squat"],["ex_404","Bodyweight Bulgarian Split Squat"],["ex_405","Shrimp Squat"]
+];
+
+const SHAPES = { square: 1, portrait: 4 / 5, landscape: 16 / 9, original: null };
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const state = {
+  file: null,
+  info: null,          // { width, height, duration, firstTimestamp, fps, codec, hdr }
+  start: 0,
+  end: 0,
+  shape: "square",
+  posX: 0.5,           // 0 = crop at left edge, 1 = right edge
+  posY: 0.5,           // 0 = top, 1 = bottom
+  size: 720,
+  exercise: null,      // { id, name }
+  exercises: EXERCISE_SNAPSHOT.map(([id, name]) => ({ id, name })),
+  existingVideos: {},
+  conversion: null,
+  resultUrl: null,
+  previewUrl: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  fileInput: $("fileInput"), drop: $("drop"), fileFacts: $("fileFacts"), fileNotice: $("fileNotice"),
+  editCard: $("editCard"), sizeCard: $("sizeCard"), exerciseCard: $("exerciseCard"), convertCard: $("convertCard"), resultCard: $("resultCard"),
+  stage: $("stage"), preview: $("preview"), cropBox: $("cropBox"), dragHint: $("dragHint"), previewNotice: $("previewNotice"),
+  playBtn: $("playBtn"), clock: $("clock"), clipLen: $("clipLen"),
+  startRange: $("startRange"), endRange: $("endRange"), startNum: $("startNum"), endNum: $("endNum"),
+  setStartBtn: $("setStartBtn"), setEndBtn: $("setEndBtn"), lengthNotice: $("lengthNotice"),
+  positionRow: $("positionRow"), positionRange: $("positionRange"), positionLabel: $("positionLabel"),
+  exerciseSearch: $("exerciseSearch"), results: $("results"), listStatus: $("listStatus"),
+  chosen: $("chosen"), fileName: $("fileName"), chosenName: $("chosenName"), replaceNotice: $("replaceNotice"),
+  summary: $("summary"), convertBtn: $("convertBtn"), progressWrap: $("progressWrap"), progressBar: $("progressBar"),
+  progressText: $("progressText"), cancelBtn: $("cancelBtn"), convertNotice: $("convertNotice"),
+  resultVideo: $("resultVideo"), resultFacts: $("resultFacts"), downloadBtn: $("downloadBtn"), shareBtn: $("shareBtn"),
+  againBtn: $("againBtn"), uploadLink: $("uploadLink"), uploadName: $("uploadName"),
+  supportNotice: $("supportNotice"),
+};
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+const even = (n) => Math.max(2, Math.floor(n / 2) * 2);
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+const fmtSec = (s) => `${(Math.round(s * 10) / 10).toFixed(1)}s`;
+const fmtMB = (bytes) => bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`;
+const CODEC_NAMES = { hevc: "HEVC (H.265)", avc: "H.264", vp9: "VP9", av1: "AV1", vp8: "VP8" };
+
+function showNotice(el, kind, html) {
+  el.className = `notice ${kind}`;
+  el.innerHTML = html;
+  el.hidden = false;
+}
+function hideNotice(el) { el.hidden = true; }
+
+function facts(el, items) {
+  el.innerHTML = "";
+  items.filter(Boolean).forEach((text) => {
+    const span = document.createElement("span");
+    span.className = "fact";
+    span.textContent = text;
+    el.appendChild(span);
+  });
+  el.hidden = false;
+}
+
+// ---------------------------------------------------------------------------
+// Geometry: crop rectangle (in the video's upright pixels) and output size
+// ---------------------------------------------------------------------------
+function cropRect() {
+  const { width: W, height: H } = state.info;
+  const ratio = SHAPES[state.shape] ?? W / H;
+  let cw = W, ch = H;
+  if (W / H > ratio) cw = Math.round(H * ratio); else ch = Math.round(W / ratio);
+  cw = Math.min(even(cw), even(W));
+  ch = Math.min(even(ch), even(H));
+  return {
+    left: Math.round((W - cw) * state.posX),
+    top: Math.round((H - ch) * state.posY),
+    width: cw,
+    height: ch,
+  };
+}
+
+/** Output width/height: the short side becomes `size` (never upscaled). */
+function outputSize(size = state.size) {
+  const crop = cropRect();
+  const shortSide = Math.min(crop.width, crop.height);
+  const scale = Math.min(1, size / shortSide);
+  return { width: even(crop.width * scale), height: even(crop.height * scale) };
+}
+
+// ---------------------------------------------------------------------------
+// Browser support check
+// ---------------------------------------------------------------------------
+async function checkSupport() {
+  if (typeof VideoEncoder === "undefined" || typeof VideoDecoder === "undefined") {
+    showNotice(els.supportNotice, "bad",
+      "This browser can't convert video. Open this page in <b>Safari</b> (iPhone or Mac) or a recent <b>Chrome</b> or <b>Edge</b>.");
+    return false;
+  }
+  try {
+    if (!(await canEncodeVideo("avc", { width: 720, height: 720 }))) {
+      showNotice(els.supportNotice, "bad",
+        "This browser can't make H.264 .mp4 files. Open this page in <b>Safari</b> or a recent <b>Chrome</b> or <b>Edge</b>.");
+      return false;
+    }
+  } catch { /* if the check itself fails, let the conversion report the real problem */ }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// 1. Load a file
+// ---------------------------------------------------------------------------
+async function loadFile(file) {
+  if (!file) return;
+  resetResult();
+  hideNotice(els.fileNotice);
+  hideNotice(els.convertNotice);
+  state.file = file;
+  facts(els.fileFacts, [file.name, fmtMB(file.size), "Reading…"]);
+
+  let info;
+  try {
+    const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+    const track = await input.getPrimaryVideoTrack();
+    if (!track) throw new Error("no-video");
+    const [duration, firstTimestamp, canDecode, hdr] = await Promise.all([
+      input.computeDuration(),
+      input.getFirstTimestamp().catch(() => 0),
+      track.canDecode(),
+      track.hasHighDynamicRange().catch(() => false),
+    ]);
+    let fps = null;
+    try { fps = (await track.computePacketStats(120)).averagePacketRate || null; } catch { /* optional */ }
+    info = {
+      width: track.displayWidth, height: track.displayHeight,
+      duration: Math.max(0.1, duration - firstTimestamp), firstTimestamp,
+      fps, codec: track.codec, hdr, canDecode,
+    };
+  } catch (err) {
+    console.error(err);
+    state.info = null;
+    showSections(false);
+    facts(els.fileFacts, [file.name, fmtMB(file.size)]);
+    showNotice(els.fileNotice, "bad", err.message === "no-video"
+      ? "That file doesn't have a video track. Pick a video file."
+      : "Couldn't read that file. Make sure it's a video (.mov or .mp4).");
+    return;
+  }
+
+  state.info = info;
+  facts(els.fileFacts, [
+    file.name, fmtMB(file.size), `${info.width}×${info.height}`, fmtSec(info.duration),
+    info.fps ? `${Math.round(info.fps)} fps` : null, CODEC_NAMES[info.codec] || info.codec, info.hdr ? "HDR" : null,
+  ]);
+
+  if (!info.canDecode) {
+    showSections(false);
+    showNotice(els.fileNotice, "bad",
+      `This browser can't decode ${CODEC_NAMES[info.codec] || "this"} video. Open this page in <b>Safari</b>, or Chrome/Edge on a recent Mac or Windows PC. ` +
+      "Or set iPhone <b>Settings → Camera → Formats → Most Compatible</b> and film again.");
+    return;
+  }
+  if (info.hdr) {
+    showNotice(els.fileNotice, "warn",
+      "This is an HDR video. It will convert, but colors may look a little washed out. For future clips, turn off <b>Settings → Camera → Record Video → HDR Video</b>.");
+  }
+
+  // Default trim: the whole clip, or the first 10 seconds of a long one.
+  state.start = 0;
+  state.end = Math.min(info.duration, 10);
+  state.posX = 0.5;
+  state.posY = 0.5;
+
+  [els.startRange, els.endRange].forEach((r) => { r.max = info.duration.toFixed(2); });
+  els.startNum.max = els.endNum.max = info.duration.toFixed(1);
+
+  if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+  state.previewUrl = URL.createObjectURL(file);
+  hideNotice(els.previewNotice);
+  els.preview.src = state.previewUrl;
+  els.stage.style.setProperty("--ar", `${info.width} / ${info.height}`);
+
+  showSections(true);
+  renderTrim();
+  renderCrop();
+  renderSizes();
+  renderSummary();
+  if (info.duration > 10) {
+    showNotice(els.lengthNotice, "warn", `The video is ${fmtSec(info.duration)} long, so the first 10 seconds are selected. Move Start and End to pick your reps.`);
+  }
+}
+
+function showSections(on) {
+  [els.editCard, els.sizeCard, els.exerciseCard, els.convertCard].forEach((c) => { c.hidden = !on; });
+}
+
+els.fileInput.addEventListener("change", () => loadFile(els.fileInput.files[0]));
+["dragenter", "dragover"].forEach((t) => els.drop.addEventListener(t, (e) => { e.preventDefault(); els.drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => els.drop.addEventListener(t, () => els.drop.classList.remove("over")));
+els.drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  const file = [...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith("video/") || /\.(mov|mp4|m4v|webm|mkv)$/i.test(f.name));
+  if (file) loadFile(file);
+});
+
+// ---------------------------------------------------------------------------
+// 2a. Preview + trim
+// ---------------------------------------------------------------------------
+const video = els.preview;
+let loopFrame = 0;
+
+video.addEventListener("error", () => { els.previewNotice.hidden = false; });
+video.addEventListener("loadeddata", () => { if (video.currentTime === 0) seek(state.start); });
+
+function seek(t) {
+  if (!Number.isFinite(t) || video.readyState === 0) return;
+  try { video.currentTime = t; } catch { /* ignore */ }
+}
+
+function playLoop() {
+  if (video.currentTime >= state.end - 0.03 || video.currentTime < state.start - 0.05) video.currentTime = state.start;
+  els.clock.textContent = fmtSec(video.currentTime);
+  if (!video.paused) loopFrame = requestAnimationFrame(playLoop);
+}
+
+els.playBtn.addEventListener("click", async () => {
+  if (video.paused) {
+    if (video.currentTime < state.start || video.currentTime >= state.end - 0.05) video.currentTime = state.start;
+    try { await video.play(); } catch { els.previewNotice.hidden = false; return; }
+    loopFrame = requestAnimationFrame(playLoop);
+  } else {
+    video.pause();
+  }
+});
+video.addEventListener("play", () => { els.playBtn.textContent = "❚❚ Pause"; });
+video.addEventListener("pause", () => { els.playBtn.textContent = "▶ Play clip"; cancelAnimationFrame(loopFrame); });
+video.addEventListener("timeupdate", () => { els.clock.textContent = fmtSec(video.currentTime); });
+
+function setTrim(start, end, seekTo) {
+  const d = state.info.duration;
+  const minLen = 0.3;
+  start = clamp(Number(start) || 0, 0, d - minLen);
+  end = clamp(Number(end) || d, start + minLen, d);
+  state.start = start;
+  state.end = end;
+  renderTrim();
+  renderSummary();
+  if (seekTo === "start") seek(start);
+  if (seekTo === "end") seek(Math.max(start, end - 0.05));
+}
+
+function renderTrim() {
+  els.startRange.value = state.start;
+  els.endRange.value = state.end;
+  if (document.activeElement !== els.startNum) els.startNum.value = state.start.toFixed(1);
+  if (document.activeElement !== els.endNum) els.endNum.value = state.end.toFixed(1);
+  const len = state.end - state.start;
+  els.clipLen.textContent = `Clip length: ${fmtSec(len)}`;
+  if (len > CONFIG.longClipSeconds) {
+    showNotice(els.lengthNotice, "warn", `That's ${fmtSec(len)}. A demo loops, so 3–10 seconds (one or two reps) is plenty and keeps the file small.`);
+  } else {
+    hideNotice(els.lengthNotice);
+  }
+}
+
+els.startRange.addEventListener("input", () => { video.pause(); setTrim(els.startRange.value, state.end, "start"); });
+els.endRange.addEventListener("input", () => { video.pause(); setTrim(state.start, els.endRange.value, "end"); });
+els.startNum.addEventListener("change", () => setTrim(els.startNum.value, state.end, "start"));
+els.endNum.addEventListener("change", () => setTrim(state.start, els.endNum.value, "end"));
+els.setStartBtn.addEventListener("click", () => setTrim(video.currentTime, Math.max(state.end, video.currentTime + 0.3)));
+els.setEndBtn.addEventListener("click", () => setTrim(Math.min(state.start, video.currentTime - 0.3), video.currentTime));
+
+// ---------------------------------------------------------------------------
+// 2b. Crop shape + position (slider or drag on the preview)
+// ---------------------------------------------------------------------------
+function slackAxis() {
+  const { width: W, height: H } = state.info;
+  const crop = cropRect();
+  if (W - crop.width > 2) return "x";
+  if (H - crop.height > 2) return "y";
+  return null;
+}
+
+function renderCrop() {
+  const { width: W, height: H } = state.info;
+  const crop = cropRect();
+  Object.assign(els.cropBox.style, {
+    left: `${(crop.left / W) * 100}%`,
+    top: `${(crop.top / H) * 100}%`,
+    width: `${(crop.width / W) * 100}%`,
+    height: `${(crop.height / H) * 100}%`,
+  });
+  const axis = slackAxis();
+  els.cropBox.hidden = state.shape === "original";
+  els.positionRow.hidden = !axis;
+  els.dragHint.hidden = !axis;
+  els.stage.classList.toggle("can-drag", !!axis);
+  // Let the page still scroll in the direction the crop can't move.
+  els.stage.style.touchAction = axis === "x" ? "pan-y" : axis === "y" ? "pan-x" : "auto";
+  if (axis) {
+    els.positionLabel.textContent = axis === "x" ? "Left ↔ Right" : "Up ↕ Down";
+    els.positionRange.value = axis === "x" ? state.posX : state.posY;
+  }
+}
+
+els.positionRange.addEventListener("input", () => {
+  const v = Number(els.positionRange.value);
+  if (slackAxis() === "x") state.posX = v; else state.posY = v;
+  renderCrop();
+});
+
+document.querySelectorAll('input[name="shape"]').forEach((r) => r.addEventListener("change", () => {
+  state.shape = r.value;
+  renderCrop();
+  renderSizes();
+  renderSummary();
+}));
+
+let drag = null;
+els.stage.addEventListener("pointerdown", (e) => {
+  const axis = slackAxis();
+  if (!axis) return;
+  drag = { axis, x: e.clientX, y: e.clientY, posX: state.posX, posY: state.posY };
+  els.stage.setPointerCapture(e.pointerId);
+  els.stage.classList.add("dragging");
+});
+els.stage.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const rect = els.stage.getBoundingClientRect();
+  const { width: W, height: H } = state.info;
+  const crop = cropRect();
+  if (drag.axis === "x") {
+    const slackPx = rect.width * (W - crop.width) / W;
+    state.posX = clamp(drag.posX + (e.clientX - drag.x) / slackPx, 0, 1);
+  } else {
+    const slackPx = rect.height * (H - crop.height) / H;
+    state.posY = clamp(drag.posY + (e.clientY - drag.y) / slackPx, 0, 1);
+  }
+  renderCrop();
+});
+const endDrag = () => { drag = null; els.stage.classList.remove("dragging"); };
+els.stage.addEventListener("pointerup", endDrag);
+els.stage.addEventListener("pointercancel", endDrag);
+
+// ---------------------------------------------------------------------------
+// 3. Size
+// ---------------------------------------------------------------------------
+function renderSizes() {
+  [480, 720, 1080].forEach((s) => {
+    const o = outputSize(s);
+    $(`size${s}`).textContent = `${o.width}×${o.height}`;
+  });
+}
+document.querySelectorAll('input[name="size"]').forEach((r) => r.addEventListener("change", () => {
+  state.size = Number(r.value);
+  renderSummary();
+}));
+
+// ---------------------------------------------------------------------------
+// 4. Exercise picker
+// ---------------------------------------------------------------------------
+const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+let activeResult = -1;
+
+async function loadExerciseList() {
+  els.listStatus.textContent = "Loading the latest exercise list…";
+  const [exercises, videos] = await Promise.allSettled([
+    fetch(CONFIG.exercisesUrl, { cache: "no-cache" }).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+    fetch(`${CONFIG.siteUrl}videos/index.json`, { cache: "no-cache" }).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+  ]);
+  if (exercises.status === "fulfilled" && Array.isArray(exercises.value)) {
+    const list = exercises.value.filter((e) => e && e.id && e.name).map((e) => ({ id: String(e.id), name: String(e.name) }));
+    if (list.length) state.exercises = list;
+  }
+  if (videos.status === "fulfilled" && videos.value && typeof videos.value === "object") {
+    state.existingVideos = videos.value;
+  }
+  const withVideo = state.exercises.filter((e) => state.existingVideos[e.id]).length;
+  els.listStatus.textContent =
+    `${state.exercises.length} exercises${exercises.status === "fulfilled" ? "" : " (saved copy; couldn't reach GitHub)"}` +
+    (videos.status === "fulfilled" ? ` · ${withVideo} already have a video` : "");
+  renderResults();
+  if (state.exercise) chooseExercise(state.exercise); // refresh the "already has a video" note
+}
+
+function searchExercises(query) {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+  return state.exercises.filter((e) => {
+    const hay = `${e.name} ${e.id}`.toLowerCase();
+    return terms.every((t) => hay.includes(t));
+  });
+}
+
+function renderResults() {
+  const query = els.exerciseSearch.value.trim();
+  els.results.innerHTML = "";
+  activeResult = -1;
+  if (!query || (state.exercise && query === state.exercise.name)) return;
+
+  const matches = searchExercises(query).slice(0, 50);
+  const exactId = state.exercises.some((e) => e.id.toLowerCase() === query.toLowerCase());
+  const items = matches.map((e) => ({ ...e }));
+  if (!exactId && ID_PATTERN.test(query)) items.push({ id: query, name: null });
+
+  items.forEach((e) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.setAttribute("role", "option");
+    const label = document.createElement("span");
+    label.textContent = e.name ?? `Use “${e.id}” as the ID`;
+    const right = document.createElement("span");
+    right.className = "row";
+    right.style.flexWrap = "nowrap";
+    if (state.existingVideos[e.id]) {
+      const b = document.createElement("span");
+      b.className = "badge has";
+      b.textContent = "HAS VIDEO";
+      right.appendChild(b);
+    }
+    const id = document.createElement("span");
+    id.className = "id";
+    id.textContent = e.id;
+    right.appendChild(id);
+    btn.append(label, right);
+    btn.addEventListener("click", () => chooseExercise(e));
+    li.appendChild(btn);
+    els.results.appendChild(li);
+  });
+  if (!items.length) {
+    const li = document.createElement("li");
+    li.className = "small faint";
+    li.style.padding = "9px 12px";
+    li.textContent = "No match. Try another word, or type the exact ID (like ex_001).";
+    els.results.appendChild(li);
+  }
+}
+
+function chooseExercise(e) {
+  state.exercise = e;
+  els.exerciseSearch.value = e.name ?? e.id;
+  els.results.innerHTML = "";
+  els.chosen.hidden = false;
+  els.fileName.textContent = `${e.id}.mp4`;
+  els.chosenName.textContent = e.name ? e.name : "Custom ID (not in the exercise list, so double-check it matches the app)";
+  const existing = state.existingVideos[e.id];
+  if (existing) {
+    showNotice(els.replaceNotice, "warn", `This exercise already has a video on the site (<code>${existing}</code>). Uploading <code>${e.id}.mp4</code> will replace it.`);
+  } else {
+    hideNotice(els.replaceNotice);
+  }
+  renderSummary();
+}
+
+els.exerciseSearch.addEventListener("input", () => {
+  if (state.exercise && els.exerciseSearch.value !== (state.exercise.name ?? state.exercise.id)) {
+    state.exercise = null;
+    els.chosen.hidden = true;
+    hideNotice(els.replaceNotice);
+    renderSummary();
+  }
+  renderResults();
+});
+els.exerciseSearch.addEventListener("keydown", (e) => {
+  const buttons = [...els.results.querySelectorAll("button")];
+  if (!buttons.length) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    activeResult = clamp(activeResult + (e.key === "ArrowDown" ? 1 : -1), 0, buttons.length - 1);
+    buttons.forEach((b, i) => b.classList.toggle("active", i === activeResult));
+    buttons[activeResult].scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    buttons[Math.max(0, activeResult)].click();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 5. Convert
+// ---------------------------------------------------------------------------
+function renderSummary() {
+  if (!state.info) return;
+  const o = outputSize();
+  const len = state.end - state.start;
+  els.summary.textContent =
+    `${fmtSec(state.start)} → ${fmtSec(state.end)} (${fmtSec(len)}) · ${o.width}×${o.height} · no audio · H.264 .mp4` +
+    (state.exercise ? ` · ${state.exercise.id}.mp4` : "");
+  els.convertBtn.disabled = !state.exercise || !!state.conversion;
+  els.convertBtn.textContent = state.exercise ? `Make ${state.exercise.id}.mp4` : "Pick the exercise first (step 4)";
+}
+
+async function convert() {
+  if (!state.info || !state.exercise || state.conversion) return;
+  video.pause();
+  resetResult();
+  hideNotice(els.convertNotice);
+  els.progressWrap.hidden = false;
+  els.progressBar.style.width = "0%";
+  els.progressText.textContent = "Starting…";
+
+  const o = outputSize();
+  const videoOptions = {
+    codec: "avc",
+    crop: cropRect(),
+    width: o.width,
+    height: o.height,
+    fit: "cover",
+    quality: QUALITY_MEDIUM,
+    keyFrameInterval: 2,
+    allowTransformationMetadata: false, // bake iPhone rotation into the pixels
+    forceTranscode: true,
+  };
+  if (state.info.fps && state.info.fps > CONFIG.maxFps + 1) videoOptions.frameRate = CONFIG.maxFps;
+
+  const output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
+  let conversion;
+  try {
+    const input = new Input({ source: new BlobSource(state.file), formats: ALL_FORMATS });
+    conversion = await Conversion.init({
+      input,
+      output,
+      tracks: "primary",
+      video: videoOptions,
+      audio: { discard: true },
+      trim: { start: state.info.firstTimestamp + state.start, end: state.info.firstTimestamp + state.end },
+    });
+  } catch (err) {
+    return failConversion(err);
+  }
+
+  const videoProblem = conversion.discardedTracks.find((d) => d.track.type === "video");
+  if (!conversion.isValid || videoProblem) {
+    const reason = videoProblem?.reason;
+    return failConversion(null, reason === "undecodable_source_codec"
+      ? "This browser can't decode this video. Try Safari, or Chrome/Edge on a recent Mac or Windows PC."
+      : reason === "no_encodable_target_codec"
+        ? "This browser can't make H.264 video at this size. Try Safari or Chrome, or pick a smaller size."
+        : "Couldn't set up the conversion for this video.");
+  }
+
+  state.conversion = conversion;
+  renderSummary();
+  const started = performance.now();
+  conversion.onProgress = (p) => {
+    const pct = Math.round(clamp(p, 0, 1) * 100);
+    els.progressBar.style.width = `${pct}%`;
+    const elapsed = (performance.now() - started) / 1000;
+    const eta = p > 0.05 ? Math.max(0, elapsed / p - elapsed) : null;
+    els.progressText.textContent = `Converting… ${pct}%${eta !== null ? ` · about ${Math.ceil(eta)}s left` : ""}`;
+  };
+
+  try {
+    await conversion.execute();
+  } catch (err) {
+    state.conversion = null;
+    if (err?.name === "ConversionCanceledError" || /cancel/i.test(err?.message || "")) {
+      els.progressWrap.hidden = true;
+      showNotice(els.convertNotice, "warn", "Canceled.");
+      renderSummary();
+      return;
+    }
+    return failConversion(err);
+  }
+  state.conversion = null;
+  els.progressWrap.hidden = true;
+  renderSummary();
+  showResult(new Blob([output.target.buffer], { type: "video/mp4" }), o);
+}
+
+function failConversion(err, message) {
+  if (err) console.error(err);
+  state.conversion = null;
+  els.progressWrap.hidden = true;
+  showNotice(els.convertNotice, "bad", message || `Conversion failed: ${err?.message || err}. Try a shorter clip or a smaller size.`);
+  renderSummary();
+}
+
+els.convertBtn.addEventListener("click", convert);
+els.cancelBtn.addEventListener("click", () => state.conversion?.cancel());
+
+// ---------------------------------------------------------------------------
+// 6. Result
+// ---------------------------------------------------------------------------
+function showResult(blob, size) {
+  const name = `${state.exercise.id}.mp4`;
+  state.resultUrl = URL.createObjectURL(blob);
+  els.resultVideo.src = state.resultUrl;
+  els.downloadBtn.href = state.resultUrl;
+  els.downloadBtn.download = name;
+  els.downloadBtn.textContent = `⬇ Download ${name}`;
+  els.uploadName.textContent = name;
+  els.uploadLink.href = CONFIG.uploadUrl;
+  facts(els.resultFacts, [name, `${size.width}×${size.height}`, fmtSec(state.end - state.start), fmtMB(blob.size), "no audio"]);
+
+  const file = new File([blob], name, { type: "video/mp4" });
+  els.shareBtn.hidden = !(navigator.canShare && navigator.canShare({ files: [file] }));
+  els.shareBtn.onclick = () => navigator.share({ files: [file], title: name }).catch(() => {});
+
+  els.resultCard.hidden = false;
+  els.resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetResult() {
+  if (state.resultUrl) URL.revokeObjectURL(state.resultUrl);
+  state.resultUrl = null;
+  els.resultVideo.removeAttribute("src");
+  els.resultCard.hidden = true;
+}
+
+els.againBtn.addEventListener("click", () => {
+  resetResult();
+  state.exercise = null;
+  els.exerciseSearch.value = "";
+  els.chosen.hidden = true;
+  hideNotice(els.replaceNotice);
+  els.fileInput.value = "";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  els.fileInput.click();
+});
+
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+checkSupport();
+loadExerciseList();
+</script>
+</body>
+</html>
